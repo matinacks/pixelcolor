@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#12121a">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+<title>Пиксельная раскраска</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--font-sans); -webkit-user-select: none; user-select: none; }
+.screen { position: fixed; inset: 0; display: none; flex-direction: column; }
+.screen.active { display: flex; }
+#menuScreen { background: var(--bg); }
+.menuHeader { padding: calc(10px + env(safe-area-inset-top)) 16px 10px; font-size: 18px; font-weight: 800; text-align: center; }
+#feed { flex: 1; overflow-y: auto; scroll-snap-type: y mandatory; scrollbar-width: none; position: relative; }
+#feed::-webkit-scrollbar { display: none; }
+.feedCard { height: 100%; scroll-snap-align: start; scroll-snap-stop: always; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 24px 20px calc(28px + env(safe-area-inset-bottom)); position: relative; }
+.previewWrap { width: min(72vw, 300px); aspect-ratio: 1; border-radius: 24px; overflow: hidden; background: #fff; box-shadow: var(--shadow-card); position: relative; }
+.previewWrap canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+.completeBadge { position: absolute; top: 10px; right: 10px; width: 32px; height: 32px; border-radius: 50%; background: var(--success); color: #0b0b12; font-size: 18px; font-weight: 900; display: flex; align-items: center; justify-content: center; }
+.cardInfo { text-align: center; }
+.cardTitle { margin: 0 0 6px; font-size: 26px; font-weight: 800; }
+.cardMeta { margin: 0; font-size: 13px; color: var(--text-muted); }
+.playBtn { padding: 15px 44px; border: none; border-radius: var(--radius-pill); background: var(--gradient-accent); color: var(--accent-text); font-size: 17px; font-weight: 800; cursor: pointer; }
+.swipeHint { position: absolute; bottom: calc(18px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); font-size: 12px; color: var(--text-dim); pointer-events: none; animation: bob 1.8s infinite; }
+@keyframes bob { 0%,100%{ transform: translate(-50%,0);} 50%{ transform: translate(-50%,-4px);} }
+#dots { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 5; }
+.dot { width: 6px; height: 6px; border-radius: 99px; background: rgba(255,255,255,.18); transition: .2s; }
+.dot.active { background: var(--success); height: 18px; }
+#gameScreen { background: var(--bg); }
+#topbar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; padding-top: calc(8px + env(safe-area-inset-top)); background: var(--bg-elevated); border-bottom: 1px solid var(--border-soft); }
+.iconBtn { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--border); background: #252533; color: var(--text); font-size: 18px; font-weight: 700; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.topCenter { flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 0 4px; }
+#levelChip { font-size: 12px; font-weight: 700; color: #b9b9cc; text-align: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#progressWrap { height: 8px; border-radius: 99px; background: var(--border-soft); overflow: hidden; }
+#progressBar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-start), var(--accent-end)); transition: .2s; }
+#progressText { font-size: 13px; font-weight: 800; color: #9fe8c8; min-width: 36px; text-align: right; }
+#playArea { flex: 1; position: relative; min-height: 0; overflow: hidden; touch-action: none; background: #0e0e14; }
+#gameCanvas { position: absolute; top: 0; left: 0; display: block; touch-action: none; }
+#palette { flex: 0 0 auto; display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); background: var(--bg-elevated); border-top: 1px solid var(--border-soft); scrollbar-width: none; }
+#palette::-webkit-scrollbar { display: none; }
+.colorBtn { flex: 0 0 auto; width: 52px; height: 52px; border-radius: var(--radius-md); border: 3px solid rgba(255,255,255,.12); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800; cursor: pointer; position: relative; transition: .12s; box-shadow: var(--shadow-button); }
+.colorBtn.active { border-color: #fff; transform: translateY(-3px); box-shadow: 0 0 0 3px rgba(110,231,183,.35); }
+.colorBtn.done, .colorBtn:disabled { opacity: .28; box-shadow: none; }
+.colorBtn .badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 99px; background: #0e0e14; color: #fff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; border: 1px solid #3a3a4d; }
+#winOverlay { position: fixed; inset: 0; z-index: 100; display: none; align-items: center; justify-content: center; padding: 24px; background: rgba(8,8,14,.86); backdrop-filter: blur(6px); }
+#winOverlay.show { display: flex; }
+.winCard { width: 100%; max-width: 320px; padding: 28px 22px; border-radius: 24px; background: #1c1c28; border: 1px solid var(--border); text-align: center; }
+.winEmoji { font-size: 52px; }
+.winCard h2 { margin: 10px 0 4px; font-size: 22px; }
+.winCard p { margin: 0 0 20px; font-size: 14px; color: #9a9ab0; }
+.winCard .btn-primary, .winCard .btn-ghost { width: 100%; margin-bottom: 10px; }
+.commDrawBtn { padding: 8px 14px; border: none; border-radius: var(--radius-pill); background: var(--gradient-accent); color: var(--accent-text); font: 800 13px var(--font-sans); cursor: pointer; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; }
+.menuTabs { display: flex; background: var(--bg-elevated); border-bottom: 1px solid var(--border-soft); }
+.menuTab { flex: 1; padding: 14px; border: none; background: transparent; color: var(--text-muted); font: 700 14px var(--font-sans); cursor: pointer; border-bottom: 2px solid transparent; }
+.menuTab.active { color: var(--text); border-bottom-color: var(--accent-start); }
+.tabContent { display: none; flex: 1; min-height: 0; flex-direction: column; }
+.tabContent.active { display: flex; }
+.commHeader { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; gap: 8px; border-bottom: 1px solid var(--border-soft); }
+.commHeader h3 { margin: 0; font-size: 15px; font-weight: 800; cursor: pointer; padding: 4px 6px; border-radius: 6px; }
+.commHeader h3:active { background: rgba(255,255,255,.06); }
+#communityList { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.communityCard { display: flex; gap: 12px; padding: 12px; background: var(--bg-elevated); border: 1px solid var(--border-soft); border-radius: var(--radius-md); align-items: stretch; }
+.commPreview { width: 120px; height: 120px; border-radius: 8px; flex-shrink: 0; image-rendering: pixelated; background: #fff; }
+.commInfo { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; justify-content: center; }
+.commName { font-weight: 800; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.commMeta { font-size: 11px; color: var(--text-muted); }
+.commRow { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.commLike { display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: var(--radius-pill); background: rgba(229, 57, 53, .1); border: 1px solid rgba(229, 57, 53, .3); color: #ff6b6b; font: 700 13px var(--font-sans); cursor: pointer; }
+.commLike.liked { background: var(--danger); color: #fff; border-color: var(--danger); }
+.commPlay { padding: 6px 14px; border: none; border-radius: var(--radius-pill); background: var(--gradient-accent); color: var(--accent-text); font: 700 13px var(--font-sans); cursor: pointer; }
+.commModActions { display: flex; flex-direction: column; gap: 6px; justify-content: center; margin-left: 8px; padding-left: 8px; border-left: 1px solid var(--border-soft); }
+.commModActions button { padding: 6px 10px; border-radius: 6px; font: 700 11px var(--font-sans); border: 1px solid; cursor: pointer; }
+.commApprove { background: rgba(110, 231, 183, .15); border-color: var(--accent-start); color: var(--accent-start); }
+.commReject, .commDelete { background: rgba(229, 57, 53, .12); border-color: var(--danger); color: var(--danger); }
+.commEmpty { padding: 40px 20px; text-align: center; color: var(--text-muted); font-size: 14px; line-height: 1.5; }
+.pendingSection { padding: 10px; margin-bottom: 6px; background: rgba(59, 130, 246, .08); border: 1px dashed rgba(59, 130, 246, .4); border-radius: var(--radius-md); display: flex; flex-direction: column; gap: 8px; }
+.pendingTitle { font-size: 13px; font-weight: 800; color: #90caf9; display: flex; justify-content: space-between; align-items: center; }
+.pendingTitle button { padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,.2); background: transparent; color: var(--text-muted); font: 600 11px var(--font-sans); cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="menuScreen" class="screen active">
+  <div class="menuHeader">Раскраски по номерам</div>
+  <div class="menuTabs">
+    <button class="menuTab active" data-tab="levels">Уровни</button>
+    <button class="menuTab" data-tab="community">Сообщество</button>
+  </div>
+  <div id="levelsTab" class="tabContent active"><div id="feed"></div><div id="dots"></div></div>
+  <div id="communityTab" class="tabContent">
+    <div class="commHeader"><h3 id="communityTitle">Каталог сообщества</h3><a href="redactor.html" id="drawOwnBtn" class="commDrawBtn">🎨 Нарисовать свой</a></div>
+    <div id="communityList"></div>
+  </div>
+</div>
+<div id="gameScreen" class="screen">
+  <header id="topbar">
+    <button id="backBtn" class="iconBtn">←</button><button id="resetBtn" class="iconBtn">↺</button>
+    <div class="topCenter"><div id="levelChip">Название</div><div id="progressWrap"><div id="progressBar"></div></div></div>
+    <span id="progressText">0%</span>
+    <button id="zoomOut" class="iconBtn">−</button><button id="zoomIn" class="iconBtn">+</button><button id="toolBtn" class="iconBtn">🖌</button>
+  </header>
+  <main id="playArea"><canvas id="gameCanvas"></canvas></main>
+  <footer id="palette"></footer>
+</div>
+<div id="winOverlay"><div class="winCard"><div class="winEmoji" id="winEmoji">🎉</div><h2 id="winTitle">Уровень пройден!</h2><p id="winLevelName"></p><button id="nextBtn" class="btn-primary">Следующий</button><button id="toMenuBtn" class="btn-ghost">В меню</button></div></div>
+
+<div id="loginModal" class="modal" style="display:none; position:fixed; inset:0; z-index:1000; background:rgba(8,8,14,.86); align-items:center; justify-content:center; padding:16px;">
+  <div class="modalCard" style="width:100%; max-width:340px; background:#1c1c28; padding:20px; border-radius:16px; border:1px solid #333344;">
+    <h2 style="color:#fff; margin-top:0;">Вход для модератора</h2>
+    <p style="color:#8b8ba3; font-size:13px; margin-bottom:15px;">Введите Email и пароль, созданные в Firebase.</p>
+    <input type="email" id="loginEmail" placeholder="Email" style="width:100%; padding:10px; margin-bottom:10px; border-radius:8px; border:1px solid #3a3a4d; background:#0e0e14; color:#fff; box-sizing:border-box; font-size:14px;">
+    <input type="password" id="loginPass" placeholder="Пароль" style="width:100%; padding:10px; margin-bottom:15px; border-radius:8px; border:1px solid #3a3a4d; background:#0e0e14; color:#fff; box-sizing:border-box; font-size:14px;">
+    <div style="display:flex; gap:8px;">
+      <button id="loginOkBtn" style="flex:1; padding:12px; border:none; border-radius:8px; background:var(--gradient-accent); color:#0b0b12; font-weight:800; cursor:pointer;">Войти</button>
+      <button id="loginCancelBtn" style="flex:1; padding:12px; border:1px solid #3a3a4d; border-radius:8px; background:transparent; color:#c9c9da; font-weight:600; cursor:pointer;">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<script src="shared.js"></script>
+<script src="levels.js"></script>
+<script type="module" src="firebase-backend.js"></script>
+<script>
+(function () {
+'use strict';
+const C = PC.constants;
+if (!window.LEVELS_DATA) return;
+let PARSED_LEVELS = PC.buildLevels(window.LEVELS_DATA);
+
+window.addEventListener('load', function() {
+    if (!PC.community) { PC.toast("Ошибка: Firebase не загружен"); return; }
+    initGame();
+});
+
+function initGame() {
+    const Game = { levelKey: null, levelIndex: 0, level: null, cells: null, filled: null, wrong: null, filledCount: 0, colorRemaining: [], selected: 1, returnTo: 'levels' };
+    const View = { viewport: { w: 0, h: 0, cellUnit: 0 }, zoom: 1, panX: 0, panY: 0 };
+    const Input = { pointers: new Map(), painting: false, lastPaintedIdx: -1, pinch: null, pinchTimeout: null, undoPaintAction: null };
+    let tool = 'brush', panState = null, currentScreen = 'menu', saveTimer = null, saveDirty = false, rafPending = false;
+
+    const menuScreen = PC.$('menuScreen'), gameScreen = PC.$('gameScreen'), feed = PC.$('feed'), dotsEl = PC.$('dots'), playArea = PC.$('playArea'), canvas = PC.$('gameCanvas'), ctx = canvas.getContext('2d'), paletteEl = PC.$('palette'), progressBar = PC.$('progressBar'), progressText = PC.$('progressText'), levelChip = PC.$('levelChip'), backBtn = PC.$('backBtn'), resetBtn = PC.$('resetBtn'), winOverlay = PC.$('winOverlay'), winEmoji = PC.$('winEmoji'), winTitle = PC.$('winTitle'), winLevelName = PC.$('winLevelName'), nextBtn = PC.$('nextBtn'), toMenuBtn = PC.$('toMenuBtn'), zoomInBtn = PC.$('zoomIn'), zoomOutBtn = PC.$('zoomOut'), toolBtn = PC.$('toolBtn');
+    const menuTabs = document.querySelectorAll('.menuTab'), levelsTab = PC.$('levelsTab'), communityTab = PC.$('communityTab'), communityList = PC.$('communityList'), communityTitle = PC.$('communityTitle');
+    const loginModal = PC.$('loginModal'), loginEmail = PC.$('loginEmail'), loginPass = PC.$('loginPass'), loginOkBtn = PC.$('loginOkBtn'), loginCancelBtn = PC.$('loginCancelBtn');
+
+    function switchTab(name) { menuTabs.forEach(b => b.classList.toggle('active', b.dataset.tab === name)); levelsTab.classList.toggle('active', name === 'levels'); communityTab.classList.toggle('active', name === 'community'); if (name === 'community') refreshCommunityList(); }
+    menuTabs.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+
+    function clampPan() { if (!Game.level) return; const vp = View.viewport, gs = vp.cellUnit * View.zoom * Game.level.size; View.panX = (gs <= vp.w) ? (vp.w - gs) / 2 : Math.min(0, Math.max(vp.w - gs, View.panX)); View.panY = (gs <= vp.h) ? (vp.h - gs) / 2 : Math.min(0, Math.max(vp.h - gs, View.panY)); }
+    function screenToWorld(sx, sy) { const c = View.viewport.cellUnit * View.zoom; return { x: (sx - View.panX) / c, y: (sy - View.panY) / c }; }
+    function maxZoom() { return Math.max(1, Math.ceil(Game.level.size / 4)); }
+    function scheduleRender() { if (rafPending) return; rafPending = true; requestAnimationFrame(() => { rafPending = false; render(); }); }
+    
+    function render() {
+        if (!Game.level) return;
+        const vp = View.viewport, cell = vp.cellUnit * View.zoom, size = Game.level.size, gs = cell * size;
+        clampPan(); ctx.imageSmoothingEnabled = false; ctx.fillStyle = '#0e0e14'; ctx.fillRect(0, 0, vp.w, vp.h); ctx.fillStyle = '#15151f'; ctx.fillRect(Math.round(View.panX), Math.round(View.panY), Math.round(gs), Math.round(gs));
+        const r = { fX: Math.max(0, Math.floor(-View.panX / cell)), lX: Math.min(size - 1, Math.ceil((vp.w - View.panX) / cell)), fY: Math.max(0, Math.floor(-View.panY / cell)), lY: Math.min(size - 1, Math.ceil((vp.h - View.panY) / cell)) };
+        for (let y = r.fY; y <= r.lY; y++) {
+            const py = Math.round(View.panY + y * cell);
+            for (let x = r.fX; x <= r.lX; x++) {
+                const px = Math.round(View.panX + x * cell), i = y * size + x, num = Game.cells[i], cw = Math.ceil(cell);
+                if (Game.filled[i]) { ctx.fillStyle = Game.level.palette[num]; ctx.fillRect(px, py, cw, cw); continue; }
+                const isMatch = (num === Game.selected); ctx.fillStyle = isMatch ? '#3b3b4f' : '#232330'; ctx.fillRect(px, py, cw, cw);
+                if (Game.wrong[i] > 0) { ctx.globalAlpha = .5; ctx.fillStyle = Game.level.palette[Game.wrong[i]]; ctx.fillRect(px, py, cw, cw); ctx.globalAlpha = 1; }
+            }
+        }
+        if (cell >= 7) {
+            const fontPx = Math.max(7, Math.round(cell * 0.48)); ctx.font = '700 ' + fontPx + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            for (let y = r.fY; y <= r.lY; y++) { const py = Math.round(View.panY + y * cell); for (let x = r.fX; x <= r.lX; x++) { const i = y * size + x; if (Game.filled[i]) continue; const num = Game.cells[i], label = String(num), minCell = label.length >= 3 ? 14 : (label.length === 2 ? 11 : 7); if (cell < minCell) continue; ctx.fillStyle = (num === Game.selected) ? '#ffffff' : '#8b8ba3'; ctx.fillText(label, Math.round(View.panX + x * cell) + cell / 2, py + cell / 2); } }
+            ctx.beginPath(); for (let i = 0; i <= size; i++) { const gx = Math.round(View.panX + i * cell) + 0.5, gy = Math.round(View.panY + i * cell) + 0.5; ctx.moveTo(gx, View.panY); ctx.lineTo(gx, View.panY + gs); ctx.moveTo(View.panX, gy); ctx.lineTo(View.panX + gs, gy); } ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = 1; ctx.stroke();
+        }
+        ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth = 2; ctx.strokeRect(View.panX, View.panY, gs, gs);
+    }
+
+    function flushSave() { if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; } if (saveDirty && Game.levelKey !== null) { PC.storage.save(Game.levelKey, Game.filled); saveDirty = false; } }
+    function scheduleSave() { saveDirty = true; if (saveTimer) return; saveTimer = setTimeout(() => { saveTimer = null; if (saveDirty && Game.levelKey !== null) { PC.storage.save(Game.levelKey, Game.filled); saveDirty = false; } }, C.SAVE_DEBOUNCE_MS); }
+
+    function tryPaint(idx, trackUndo) {
+        if (idx < 0 || idx >= Game.level.cellCount || Game.filled[idx]) return;
+        const prevWrong = Game.wrong[idx];
+        if (Game.cells[idx] === Game.selected) {
+            Game.filled[idx] = 1; Game.wrong[idx] = -1; Game.filledCount++; Game.colorRemaining[Game.selected]--;
+            if (trackUndo) Input.undoPaintAction = { idx, prevWrong }; scheduleSave(); PC.haptic(12); updateProgressUI(); updatePaletteBadge(Game.selected); scheduleRender();
+            if (Game.filledCount === Game.level.cellCount) onLevelComplete();
+        } else {
+            Game.wrong[idx] = Game.selected; if (trackUndo) Input.undoPaintAction = { idx, prevWrong }; PC.haptic([8, 40, 8]); scheduleRender();
+        }
+    }
+    function undoFirstPaintIfNeeded() { const a = Input.undoPaintAction; if (!a) return; Input.undoPaintAction = null; if (Game.filled[a.idx]) { Game.filled[a.idx] = 0; Game.filledCount--; Game.colorRemaining[Game.cells[a.idx]]++; updateProgressUI(); updatePaletteBadge(Game.cells[a.idx]); } Game.wrong[a.idx] = a.prevWrong; scheduleRender(); }
+    function updateProgressUI() { progressBar.style.width = Math.round((Game.filledCount / Game.level.cellCount) * 100) + '%'; progressText.textContent = Math.round((Game.filledCount / Game.level.cellCount) * 100) + '%'; }
+    
+    function buildPaletteOnce() {
+       if (paletteEl.children.length > 0) return;
+        let maxC = 0; PARSED_LEVELS.forEach(lvl => maxC = Math.max(maxC, lvl.palette.length - 1));
+        for (let c = 1; c <= maxC; c++) { const btn = document.createElement('button'); btn.className = 'colorBtn'; btn.dataset.color = String(c); btn.innerHTML = '<span>' + c + '</span><span class="badge">0</span>'; btn.addEventListener('click', () => { if (Game.colorRemaining[c]) { Game.selected = c; updatePaletteActive(); scheduleRender(); } }); paletteEl.appendChild(btn); }
+    }
+    function resetPaletteForLevel() {
+        const colorCount = Game.level.palette.length - 1; Game.colorRemaining = new Array(colorCount + 1).fill(0);
+        for (let i = 0; i < Game.level.cellCount; i++) Game.colorRemaining[Game.cells[i]]++;
+        paletteEl.querySelectorAll('.colorBtn').forEach(btn => { const c = +btn.dataset.color; if (c > colorCount || Game.colorRemaining[c] === 0) { btn.style.display = 'none'; return; } btn.style.display = 'flex'; btn.style.background = Game.level.palette[c]; btn.style.color = PC.contrastColor(Game.level.palette[c]); btn.classList.remove('active', 'done'); btn.disabled = false; updatePaletteBadge(c); });
+    }
+    function updatePaletteBadge(c) { const btn = paletteEl.querySelector('.colorBtn[data-color="' + c + '"]'); if (!btn) return; const left = Game.colorRemaining[c] || 0; const badge = btn.querySelector('.badge'); badge.textContent = left; badge.style.display = left > 0 ? 'flex' : 'none'; btn.classList.toggle('done', left === 0); btn.disabled = (left === 0); }
+    function updatePaletteActive() { paletteEl.querySelectorAll('.colorBtn').forEach(btn => { const isA = (+btn.dataset.color) === Game.selected; btn.classList.toggle('active', isA); if (isA) { const pW = paletteEl.clientWidth, bL = btn.offsetLeft, bW = btn.offsetWidth; if (bL < paletteEl.scrollLeft || bL + bW > paletteEl.scrollLeft + pW) paletteEl.scrollTo({ left: bL - pW / 2 + bW / 2, behavior: 'smooth' }); } }); }
+
+    function setLevel(parsed, key) {
+        Game.levelKey = key; Game.level = parsed; Game.cells = parsed.cells;
+        if (!Game.filled || Game.filled.length !== parsed.cellCount) { Game.filled = new Uint8Array(parsed.cellCount); Game.wrong = new Int16Array(parsed.cellCount); }
+        Game.filled.fill(0); Game.wrong.fill(-1); Game.filledCount = 0; Game.selected = 1;
+        Input.pointers.clear(); Input.painting = false; Input.lastPaintedIdx = -1; Input.pinch = null; Input.undoPaintAction = null; panState = null; if (Input.pinchTimeout) { clearTimeout(Input.pinchTimeout); Input.pinchTimeout = null; }
+        levelChip.textContent = parsed.name + ' · ' + parsed.size + '×' + parsed.size; View.zoom = 1; View.panX = 0; View.panY = 0; clampPan();
+        buildPaletteOnce(); resetPaletteForLevel();
+        for (let c = 1; c < Game.colorRemaining.length; c++) if (Game.colorRemaining[c] > 0) { Game.selected = c; break; }
+        updatePaletteActive(); updateProgressUI(); winOverlay.classList.remove('show'); scheduleRender();
+    }
+
+    function restoreProgress() {
+        const bits = PC.storage.decodeForLevel(Game.levelKey, Game.level.cellCount);
+        if (!bits) { PC.storage.clear(Game.levelKey); return; }
+        let count = 0; for (let i = 0; i < Game.level.cellCount; i++) if (bits[i]) count++;
+        if (count === 0) return;
+        Game.filled.set(bits); Game.wrong.fill(-1); Game.filledCount = count;
+        for (let c = 1; c < Game.colorRemaining.length; c++) Game.colorRemaining[c] = 0;
+        for (let i = 0; i < Game.level.cellCount; i++) if (!Game.filled[i]) Game.colorRemaining[Game.cells[i]]++;
+        for (let c = 1; c < Game.colorRemaining.length; c++) updatePaletteBadge(c);
+        Game.selected = 1; for (let c = 1; c < Game.colorRemaining.length; c++) if (Game.colorRemaining[c] > 0) { Game.selected = c; break; }
+        updatePaletteActive(); updateProgressUI(); scheduleRender();
+    }
+
+    function playLevel(index) { flushSave(); Game.returnTo = 'levels'; Game.levelIndex = index; currentScreen = 'game'; menuScreen.classList.remove('active'); gameScreen.classList.add('active'); setLevel(PARSED_LEVELS[index], index); resizeCanvas(); restoreProgress(); }
+    function playCustomLevel(item) { flushSave(); let parsed; try { parsed = PC.levelFormat.parseLevel(item.level); } catch (e) { PC.toast('Уровень повреждён'); return; } Game.returnTo = 'community'; currentScreen = 'game'; menuScreen.classList.remove('active'); gameScreen.classList.add('active'); setLevel(parsed, 'fb_' + item.id); resizeCanvas(); restoreProgress(); }
+
+    function goToMenu() {
+        flushSave(); winOverlay.classList.remove('show'); Input.pointers.clear(); Input.painting = false; Input.lastPaintedIdx = -1; Input.pinch = null; Input.undoPaintAction = null; panState = null;
+        currentScreen = 'menu'; gameScreen.classList.remove('active'); menuScreen.classList.add('active');
+        if (Game.returnTo === 'community') switchTab('community'); else { switchTab('levels'); buildMenu(); }
+    }
+
+    function onLevelComplete() {
+        PC.haptic([30, 60, 30, 60, 80]); const isCustom = (typeof Game.levelKey === 'string'), isLast = !isCustom && Game.levelIndex >= PARSED_LEVELS.length - 1;
+        winEmoji.textContent = isCustom ? '🎨' : (isLast ? '🏆' : '🎉'); winTitle.textContent = isLast ? 'Все пройдены!' : 'Уровень пройден!'; winLevelName.textContent = Game.level.name;
+        if (isCustom) { nextBtn.textContent = '← В каталог'; nextBtn.onclick = goToMenu; nextBtn.style.display = ''; }
+        else { nextBtn.textContent = 'Следующий уровень'; nextBtn.onclick = () => playLevel(Game.levelIndex + 1); nextBtn.style.display = isLast ? 'none' : ''; }
+        winOverlay.classList.add('show'); if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; } PC.storage.save(Game.levelKey, Game.filled); saveDirty = false;
+    }
+
+    function resizeCanvas() {
+        if (!Game.level) return; const rect = playArea.getBoundingClientRect(), newW = Math.max(1, rect.width), newH = Math.max(1, rect.height); if (newW < 10 || newH < 10) return;
+        View.viewport.w = newW; View.viewport.h = newH; View.viewport.cellUnit = Math.min(newW, newH) / Game.level.size;
+        const dpr = Math.min(window.devicePixelRatio || 1, 3); canvas.width = Math.round(newW * dpr); canvas.height = Math.round(newH * dpr); canvas.style.width = newW + 'px'; canvas.style.height = newH + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0); clampPan(); scheduleRender();
+    }
+
+    function onPointerDown(e) {
+        if (currentScreen !== 'game' || (e.pointerType === 'mouse' && e.button !== 0)) return;
+        canvas.setPointerCapture(e.pointerId); Input.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (tool === 'pan' && Input.pointers.size === 1) { panState = { id: e.pointerId, x: e.clientX, y: e.clientY, panX0: View.panX, panY0: View.panY }; return; }
+        if (Input.pointers.size === 1) {
+            Input.painting = true; Input.lastPaintedIdx = -1; Input.undoPaintAction = null;
+            const r = canvas.getBoundingClientRect(), w = screenToWorld(e.clientX - r.left, e.clientY - r.top), idx = Math.floor(w.y) * Game.level.size + Math.floor(w.x);
+            if (idx >= 0 && idx < Game.level.cellCount) { Input.lastPaintedIdx = idx; tryPaint(idx, true); }
+        } else if (Input.pointers.size === 2) {
+            Input.painting = false; panState = null; if (Input.pinchTimeout) { clearTimeout(Input.pinchTimeout); Input.pinchTimeout = null; }
+            if (tool === 'pan') { Input.undoPaintAction = null; startPinch(); }
+            else { undoFirstPaintIfNeeded(); Input.pinchTimeout = setTimeout(() => { if (Input.pointers.size === 2) startPinch(); }, C.PINCH_START_DELAY_MS); }
+        }
+    }
+    function onPointerMove(e) {
+        if (!Input.pointers.has(e.pointerId)) return; Input.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (panState && panState.id === e.pointerId && Input.pointers.size === 1) { View.panX = panState.panX0 + (e.clientX - panState.x); View.panY = panState.panY0 + (e.clientY - panState.y); clampPan(); scheduleRender(); return; }
+        if (Input.pointers.size === 2 && Input.pinch) { updatePinch(); }
+        else if (Input.pointers.size === 1 && Input.painting) {
+            Input.undoPaintAction = null; const r = canvas.getBoundingClientRect(), w = screenToWorld(e.clientX - r.left, e.clientY - r.top), idx = Math.floor(w.y) * Game.level.size + Math.floor(w.x);
+            if (idx !== Input.lastPaintedIdx && idx >= 0 && idx < Game.level.cellCount) { tryPaint(idx, false); Input.lastPaintedIdx = idx; }
+        }
+    }
+    function onPointerUp(e) {
+        Input.pointers.delete(e.pointerId); if (panState && panState.id === e.pointerId) panState = null;
+        if (Input.pointers.size < 2) { Input.pinch = null; if (Input.pinchTimeout) { clearTimeout(Input.pinchTimeout); Input.pinchTimeout = null; } }
+        if (Input.pointers.size === 0) { Input.painting = false; Input.lastPaintedIdx = -1; Input.undoPaintAction = null; } else { Input.painting = false; }
+    }
+    function startPinch() { const p = Array.from(Input.pointers.values()); if (p.length < 2) return; panState = null; const d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y), r = canvas.getBoundingClientRect(); const mx = (p[0].x + p[1].x) / 2 - r.left, my = (p[0].y + p[1].y) / 2 - r.top, w = screenToWorld(mx, my); Input.pinch = { d: Math.max(d, 1), z: View.zoom, x: w.x, y: w.y }; }
+    function updatePinch() { const p = Array.from(Input.pointers.values()); if (p.length < 2 || !Input.pinch) return; const d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y), r = canvas.getBoundingClientRect(); const mx = (p[0].x + p[1].x) / 2 - r.left, my = (p[0].y + p[1].y) / 2 - r.top; View.zoom = Math.max(C.MIN_ZOOM, Math.min(maxZoom(), Input.pinch.z * (d / Input.pinch.d))); const cell = View.viewport.cellUnit * View.zoom; View.panX = mx - Input.pinch.x * cell; View.panY = my - Input.pinch.y * cell; clampPan(); scheduleRender(); }
+     canvas.addEventListener('pointerdown', onPointerDown); canvas.addEventListener('pointermove', onPointerMove); canvas.addEventListener('pointerup', onPointerUp); canvas.addEventListener('pointercancel', onPointerUp);
+
+    function redrawPreviewCanvas(cv, level, isComplete) {
+        const W = cv.width, g = cv.getContext('2d'); g.imageSmoothingEnabled = false; g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, W, W); const cl = W / level.size;
+        for (let y = 0; y < level.size; y++) for (let x = 0; x < level.size; x++) { const c = level.cells[y * level.size + x]; let color; if (isComplete) color = level.palette[c]; else if (c === level.previewBg) color = '#FFFFFF'; else color = PC.grayscaleHex(level.palette[c]); g.fillStyle = color; g.fillRect(x * cl, y * cl, Math.ceil(cl), Math.ceil(cl)); }
+    }
+    function buildMenu() {
+        feed.innerHTML = ''; dotsEl.innerHTML = '';
+        PARSED_LEVELS.forEach((level, i) => {
+            const isC = PC.storage.isComplete(i, level.cellCount), card = document.createElement('div'); card.className = 'feedCard';
+            const wrap = document.createElement('div'); wrap.className = 'previewWrap'; const cv = document.createElement('canvas'); const W = Math.min(256, level.size * 4); cv.width = W; cv.height = W; wrap.appendChild(cv);
+            if (isC) { const b = document.createElement('div'); b.className = 'completeBadge'; b.textContent = '✓'; wrap.appendChild(b); }
+            card.appendChild(wrap); const info = document.createElement('div'); info.className = 'cardInfo';
+            info.innerHTML = `<h2 class="cardTitle">${PC.escapeHtml(level.name)}</h2><p class="cardMeta">${level.size}×${level.size} · ${level.cellCount} клеток · ${level.palette.length-1} цветов</p>`;
+            card.appendChild(info); const btn = document.createElement('button'); btn.className = 'playBtn'; btn.textContent = 'Играть'; btn.onclick = () => playLevel(i); card.appendChild(btn);
+            if (i < PARSED_LEVELS.length - 1) { const hint = document.createElement('div'); hint.className = 'swipeHint'; hint.textContent = 'Свайп вверх ↑'; card.appendChild(hint); }
+            feed.appendChild(card); redrawPreviewCanvas(cv, level, isC); const dot = document.createElement('div'); dot.className = 'dot' + (i === 0 ? ' active' : ''); dotsEl.appendChild(dot);
+        });
+    }
+    feed.addEventListener('scroll', () => { const idx = Math.round(feed.scrollTop / feed.clientHeight); dotsEl.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === idx)); }, { passive: true });
+
+    function formatDate(ts) { const diff = Date.now() - ts, min = 60000, hour = 3600000, day = 86400000; if (diff < min) return 'только что'; if (diff < hour) return Math.floor(diff / min) + ' мин назад'; if (diff < day) return Math.floor(diff / hour) + ' ч назад'; return new Date(ts).toLocaleDateString(); }
+
+    function renderCommunityPreview(cv, item) {
+        const W = cv.width, g = cv.getContext('2d'); g.imageSmoothingEnabled = false;
+        try {
+            const level = item.level, size = level.size, cellCount = size * size, cl = W / size;
+            const bits = PC.storage.decodeForLevel('fb_' + item.id, cellCount); let filledCount = 0; if (bits) { for (let i = 0; i < cellCount; i++) if (bits[i]) filledCount++; }
+            const isComplete = (filledCount === cellCount) && cellCount > 0, isHex = String(level.rows[0]).length === size * 2, cells = new Array(cellCount);
+            for (let y = 0; y < size; y++) { const row = String(level.rows[y]); for (let x = 0; x < size; x++) { let code; if (isHex) code = parseInt(row.substr(x * 2, 2), 16); else code = row.charCodeAt(x) - (row.charCodeAt(x) >= 97 ? 87 : 48); cells[y * size + x] = code; } }
+            for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+                const i = y * size + x, c = cells[i], palette = level.palette[c] || '#FFFFFF'; let color;
+                if (isComplete) color = palette; else if (bits && bits[i]) color = palette; else if (c === level.previewBg) color = '#FFFFFF'; else color = PC.grayscaleHex(palette);
+                g.fillStyle = color; const px = Math.floor(x * cl), py = Math.floor(y * cl), pw = Math.ceil((x + 1) * cl) - px, ph = Math.ceil((y + 1) * cl) - py; g.fillRect(px, py, pw, ph);
+            }
+        } catch (e) { g.fillStyle = '#333'; g.fillRect(0, 0, W, W); }
+    }
+
+    async function renderCommunityCard(item, isPending) {
+        const card = document.createElement('div'); card.className = 'communityCard';
+        const cv = document.createElement('canvas'); cv.className = 'commPreview'; const dpr = Math.min(window.devicePixelRatio || 1, 2); cv.width = 120 * dpr; cv.height = 120 * dpr; renderCommunityPreview(cv, item); card.appendChild(cv);
+        const info = document.createElement('div'); info.className = 'commInfo';
+        info.innerHTML = `<div class="commName">${PC.escapeHtml(item.name)}</div>`;
+        const who = item.anonymous ? 'Анонимно' : (item.author || 'Аноним'); const dateStr = item.date ? formatDate(item.date.toMillis()) : 'только что';
+        info.innerHTML += `<div class="commMeta">${who} · ${dateStr}</div>`;
+        const row = document.createElement('div'); row.className = 'commRow';
+        if (!isPending) {
+            const liked = await PC.community.hasLiked(item.id);
+            const likeBtn = document.createElement('button'); likeBtn.className = 'commLike' + (liked ? ' liked' : ''); likeBtn.innerHTML = `<span>❤️</span><span>${item.likes || 0}</span>`;
+            likeBtn.onclick = async () => { const res = await PC.community.like(item.id); if (res) { likeBtn.classList.toggle('liked', res.liked); likeBtn.querySelector('span:last-child').textContent = res.likes; } };
+            row.appendChild(likeBtn); const playBtn = document.createElement('button'); playBtn.className = 'commPlay'; playBtn.textContent = 'Играть'; playBtn.onclick = () => playCustomLevel(item); row.appendChild(playBtn);
+        }
+        info.appendChild(row); card.appendChild(info);
+        if (isPending) {
+            const modActions = document.createElement('div'); modActions.className = 'commModActions';
+            const appBtn = document.createElement('button'); appBtn.className = 'commApprove'; appBtn.textContent = '✓'; appBtn.onclick = async () => { await PC.community.approve(item.id); PC.toast('Одобрено'); refreshCommunityList(); };
+            const rejBtn = document.createElement('button'); rejBtn.className = 'commReject'; rejBtn.textContent = '✕'; rejBtn.onclick = async () => { await PC.community.reject(item.id); PC.toast('Отклонено'); refreshCommunityList(); };
+            modActions.appendChild(appBtn); modActions.appendChild(rejBtn); card.appendChild(modActions);
+        } else if (PC.community.isModerator()) {
+            const modActions = document.createElement('div'); modActions.className = 'commModActions';
+            const delBtn = document.createElement('button'); delBtn.className = 'commDelete'; delBtn.textContent = '🗑'; delBtn.onclick = async () => { if(confirm('Удалить?')) { await PC.community.remove(item.id); PC.toast('Удалено'); refreshCommunityList(); } };
+            modActions.appendChild(delBtn); card.appendChild(modActions);
+        }
+        return card;
+    }
+
+    async function refreshCommunityList() {
+        const isMod = PC.community.isModerator(); communityTitle.textContent = isMod ? '🔓 Каталог (модератор)' : 'Каталог сообщества'; communityList.innerHTML = '<div style="text-align:center; padding:20px; color:#8b8ba3;">Загрузка...</div>';
+        if (isMod) {
+            const pending = await PC.community.getPending(); const section = document.createElement('div'); section.className = 'pendingSection';
+            section.innerHTML = `<div class="pendingTitle"><span>На модерации: ${pending.length}</span><button id="logoutBtn">Выйти</button></div>`;
+            section.querySelector('#logoutBtn').onclick = async () => { await PC.community.logout(); PC.toast('Режим модератора выключен'); refreshCommunityList(); };
+            if (pending.length === 0) section.innerHTML += '<div style="padding:12px;color:#8b8ba3;font-size:12px;text-align:center;">Пока нет новых уровней</div>';
+            else for (const item of pending) section.appendChild(await renderCommunityCard(item, true));
+            communityList.innerHTML = ''; communityList.appendChild(section);
+        }
+        const approved = await PC.community.getApproved(); if (!isMod) communityList.innerHTML = '';
+        if (approved.length === 0 && !isMod) { communityList.innerHTML = '<div class="commEmpty">Пока никто не нарисовал свой уровень.<br>Стань первым!</div>'; return; }
+        for (const item of approved) communityList.appendChild(await renderCommunityCard(item, false));
+    }
+
+    let longPressTimer = null;
+    communityTitle.addEventListener('pointerdown', () => {
+        longPressTimer = setTimeout(() => {
+            longPressTimer = null;
+            if (PC.community.isModerator()) { if (confirm('Выйти из режима модератора?')) PC.community.logout().then(refreshCommunityList); }
+            else { loginEmail.value = ''; loginPass.value = ''; loginModal.style.display = 'flex'; }
+        }, 10000);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => communityTitle.addEventListener(ev, () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } }));
+
+    loginOkBtn.onclick = async () => {
+        loginOkBtn.disabled = true; loginOkBtn.textContent = '...'; const res = await PC.community.loginModerator(loginEmail.value, loginPass.value);
+        loginOkBtn.disabled = false; loginOkBtn.textContent = 'Войти';
+        if (res.success) { loginModal.style.display = 'none'; PC.toast('Вход выполнен'); refreshCommunityList(); }
+        else { PC.toast('Ошибка: ' + res.error); }
+    };
+    loginCancelBtn.onclick = () => loginModal.style.display = 'none';
+
+    backBtn.onclick = goToMenu; resetBtn.onclick = () => { PC.storage.clear(Game.levelKey); setLevel(Game.level, Game.levelKey); resizeCanvas(); PC.toast('Сброшено'); }; toMenuBtn.onclick = goToMenu;
+    zoomInBtn.onclick = () => { View.zoom = Math.min(maxZoom(), View.zoom * 1.3); clampPan(); scheduleRender(); }; zoomOutBtn.onclick = () => { View.zoom = Math.max(C.MIN_ZOOM, View.zoom / 1.3); clampPan(); scheduleRender(); };
+    toolBtn.onclick = () => { tool = (tool === 'brush') ? 'pan' : 'brush'; toolBtn.textContent = tool === 'brush' ? '🖌' : '✋'; };
+
+    if (window.ResizeObserver) new ResizeObserver(resizeCanvas).observe(playArea); else window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 200)); window.addEventListener('pagehide', flushSave);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushSave(); });
+    buildMenu();
+}
+})();
+</script>
+</body>
+</html>
