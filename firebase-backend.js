@@ -18,7 +18,12 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 let currentUser = null;
-onAuthStateChanged(auth, (user) => { currentUser = user; });
+onAuthStateChanged(auth, (user) => {
+    currentUser = user;
+    if (!user) {
+        signInAnonymously(auth).catch(console.error);
+    }
+});
 
 // Анонимный вход для игроков
 signInAnonymously(auth).catch(console.error);
