@@ -192,11 +192,17 @@ function initGame() {
     function undoFirstPaintIfNeeded() { const a = Input.undoPaintAction; if (!a) return; Input.undoPaintAction = null; if (Game.filled[a.idx]) { Game.filled[a.idx] = 0; Game.filledCount--; Game.colorRemaining[Game.cells[a.idx]]++; updateProgressUI(); updatePaletteBadge(Game.cells[a.idx]); } Game.wrong[a.idx] = a.prevWrong; scheduleRender(); }
     function updateProgressUI() { progressBar.style.width = Math.round((Game.filledCount / Game.level.cellCount) * 100) + '%'; progressText.textContent = Math.round((Game.filledCount / Game.level.cellCount) * 100) + '%'; }
     
-    function buildPaletteOnce() {
-       if (paletteEl.children.length > 0) return;
-        let maxC = 0; PARSED_LEVELS.forEach(lvl => maxC = Math.max(maxC, lvl.palette.length - 1));
-        for (let c = 1; c <= maxC; c++) { const btn = document.createElement('button'); btn.className = 'colorBtn'; btn.dataset.color = String(c); btn.innerHTML = '<span>' + c + '</span><span class="badge">0</span>'; btn.addEventListener('click', () => { if (Game.colorRemaining[c]) { Game.selected = c; updatePaletteActive(); scheduleRender(); } }); paletteEl.appendChild(btn); }
+    function ensurePaletteHasColors(colorCount) {
+        const currentCount = paletteEl.children.length;
+        if (colorCount <= currentCount) return;
+        for (let c = currentCount + 1; c <= colorCount; c++) {
+            const btn = document.createElement('button'); btn.className = 'colorBtn'; btn.dataset.color = String(c);
+            btn.innerHTML = '<span>' + c + '</span><span class="badge">0</span>';
+            btn.addEventListener('click', () => { if (Game.colorRemaining[c]) { Game.selected = c; updatePaletteActive(); scheduleRender(); } });
+            paletteEl.appendChild(btn);
+        }
     }
+
     function resetPaletteForLevel() {
         const colorCount = Game.level.palette.length - 1; Game.colorRemaining = new Array(colorCount + 1).fill(0);
         for (let i = 0; i < Game.level.cellCount; i++) Game.colorRemaining[Game.cells[i]]++;
@@ -211,7 +217,9 @@ function initGame() {
         Game.filled.fill(0); Game.wrong.fill(-1); Game.filledCount = 0; Game.selected = 1;
         Input.pointers.clear(); Input.painting = false; Input.lastPaintedIdx = -1; Input.pinch = null; Input.undoPaintAction = null; panState = null; if (Input.pinchTimeout) { clearTimeout(Input.pinchTimeout); Input.pinchTimeout = null; }
         levelChip.textContent = parsed.name + ' · ' + parsed.size + '×' + parsed.size; View.zoom = 1; View.panX = 0; View.panY = 0; clampPan();
-        buildPaletteOnce(); resetPaletteForLevel();
+        
+        ensurePaletteHasColors(parsed.palette.length - 1);
+        resetPaletteForLevel();
         for (let c = 1; c < Game.colorRemaining.length; c++) if (Game.colorRemaining[c] > 0) { Game.selected = c; break; }
         updatePaletteActive(); updateProgressUI(); winOverlay.classList.remove('show'); scheduleRender();
     }
@@ -252,8 +260,7 @@ function initGame() {
         const dpr = Math.min(window.devicePixelRatio || 1, 3); canvas.width = Math.round(newW * dpr); canvas.height = Math.round(newH * dpr); canvas.style.width = newW + 'px'; canvas.style.height = newH + 'px';
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0); clampPan(); scheduleRender();
     }
-
-    function onPointerDown(e) {
+function onPointerDown(e) {
         if (currentScreen !== 'game' || (e.pointerType === 'mouse' && e.button !== 0)) return;
         canvas.setPointerCapture(e.pointerId); Input.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
         if (tool === 'pan' && Input.pointers.size === 1) { panState = { id: e.pointerId, x: e.clientX, y: e.clientY, panX0: View.panX, panY0: View.panY }; return; }
@@ -283,7 +290,8 @@ function initGame() {
     }
     function startPinch() { const p = Array.from(Input.pointers.values()); if (p.length < 2) return; panState = null; const d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y), r = canvas.getBoundingClientRect(); const mx = (p[0].x + p[1].x) / 2 - r.left, my = (p[0].y + p[1].y) / 2 - r.top, w = screenToWorld(mx, my); Input.pinch = { d: Math.max(d, 1), z: View.zoom, x: w.x, y: w.y }; }
     function updatePinch() { const p = Array.from(Input.pointers.values()); if (p.length < 2 || !Input.pinch) return; const d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y), r = canvas.getBoundingClientRect(); const mx = (p[0].x + p[1].x) / 2 - r.left, my = (p[0].y + p[1].y) / 2 - r.top; View.zoom = Math.max(C.MIN_ZOOM, Math.min(maxZoom(), Input.pinch.z * (d / Input.pinch.d))); const cell = View.viewport.cellUnit * View.zoom; View.panX = mx - Input.pinch.x * cell; View.panY = my - Input.pinch.y * cell; clampPan(); scheduleRender(); }
-     canvas.addEventListener('pointerdown', onPointerDown); canvas.addEventListener('pointermove', onPointerMove); canvas.addEventListener('pointerup', onPointerUp); canvas.addEventListener('pointercancel', onPointerUp);
+    
+    canvas.addEventListener('pointerdown', onPointerDown); canvas.addEventListener('pointermove', onPointerMove); canvas.addEventListener('pointerup', onPointerUp); canvas.addEventListener('pointercancel', onPointerUp);
 
     function redrawPreviewCanvas(cv, level, isComplete) {
         const W = cv.width, g = cv.getContext('2d'); g.imageSmoothingEnabled = false; g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, W, W); const cl = W / level.size;
