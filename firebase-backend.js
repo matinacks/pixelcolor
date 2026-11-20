@@ -18,6 +18,8 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 let currentUser = null;
+
+// Исправленный вход: если мы уже модератор, анонимный вход не сбивает сессию
 onAuthStateChanged(auth, (user) => {
     currentUser = user;
     if (!user) {
@@ -25,16 +27,15 @@ onAuthStateChanged(auth, (user) => {
     }
 });
 
-// Анонимный вход для игроков
-signInAnonymously(auth).catch(console.error);
-
 const Comm = {};
 
 Comm.loginModerator = async (email, password) => {
     try {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         return { success: true, email: userCredential.user.email };
-    } catch (e) { return { success: false, error: "Неверный Email или пароль" }; }
+    } catch (e) { 
+        return { success: false, error: "Неверный Email или пароль" }; 
+    }
 };
 
 Comm.logout = async () => {
@@ -71,9 +72,18 @@ Comm.submit = async (levelData, author, anonymous) => {
     });
 };
 
-Comm.approve = async (id) => { await updateDoc(doc(db, "levels", id), { status: 'approved' }); };
-Comm.reject = async (id) => { await updateDoc(doc(db, "levels", id), { status: 'rejected' }); };
-Comm.remove = async (id) => { await deleteDoc(doc(db, "levels", id)); };
+Comm.approve = async (id) => { 
+    await updateDoc(doc(db, "levels", id), { status: 'approved' }); 
+};
+
+// ИСПРАВЛЕНИЕ: Теперь отклонение полностью удаляет уровень
+Comm.reject = async (id) => { 
+    await deleteDoc(doc(db, "levels", id)); 
+};
+
+Comm.remove = async (id) => { 
+    await deleteDoc(doc(db, "levels", id)); 
+};
 
 Comm.hasLiked = async (levelId) => {
     if (!currentUser) return false;
