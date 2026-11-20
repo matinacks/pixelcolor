@@ -6,7 +6,7 @@
    Поднимайте CACHE_VERSION при каждом деплое.
    ============================================================ */
 
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const CACHE_STATIC  = 'pixelcolor-static-' + CACHE_VERSION;
 const CACHE_RUNTIME = 'pixelcolor-runtime-' + CACHE_VERSION;
 
